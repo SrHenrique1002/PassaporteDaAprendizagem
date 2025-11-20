@@ -1,0 +1,16 @@
+# Dependências principais
+streamlit
+langchain-core
+langchain-community
+langchain
+langchain-google-genai
+
+# Dependências para leitura de PDF e Vector Store
+pypdf
+faiss-cpu
+
+# Dependências para variáveis de ambiente
+python-dotenv
+
+# Nota: As versões exatas podem variar. Se tiver problemas,
+# use 'pip freeze > requirements.txt' no seu ambiente funcional.
