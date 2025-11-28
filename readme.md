@@ -4,15 +4,7 @@
 [![Tecnologia Principal](https://img.shields.io/badge/Tecnologia-Python%20%7C%20Streamlit-blueviolet.svg)]()
 [![Modelo LLM](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-0F7EF6.svg)]()
 
-> Uma aplicação web (Streamlit) que utiliza a arquitetura **RAG (Retrieval-Augmented Generation)** para analisar currículos em PDF e gerar, automaticamente, pré-questionários de diagnóstico de 5 perguntas, focando na identificação de defasagens específicas em unidades curriculares.
-
-## 🌟 Sobre o Projeto
-
-Este projeto automatiza a criação de ferramentas de diagnóstico pedagógico. Ao invés de o professor ou analista ler manualmente extensos documentos curriculares para criar perguntas de avaliação, a aplicação faz o seguinte:
-
-1.  **Indexa Currículos (PDF):** Utiliza o **LangChain** para carregar PDFs curriculares, dividi-los em pedaços (`chunks`) e indexá-los em um **VectorStore FAISS** com Embeddings do Google Gemini.
-2.  **Busca Contextual (RAG):** O usuário insere a localização da defasagem (ex: "Matemática, II Unidade, 5º ano"). A aplicação busca o conteúdo programático exato (os `chunks` relevantes) dentro do VectorStore.
-3.  **Geração com LLM:** Um `ChatPromptTemplate` instrui o modelo **Gemini 2.5 Flash** a agir como um "analista pedagógico" e gerar 5 perguntas de diagnóstico **apenas** com base no contexto curricular recuperado.
+> 
 
 ### Fluxo RAG de Alto Nível
 
@@ -78,27 +70,30 @@ streamlit run nome_do_arquivo_principal.py  # Ex: streamlit run main.py
 O aplicativo será aberto automaticamente no seu navegador padrão.
 
 ## 🚀 Como Usar
-A interface do Streamlit divide o uso em duas etapas principais:
+O fluxo da aplicação é dividido em três passos automatizados:
 
-Passo 1: Indexação do Currículo (Sidebar)
-Acesse a Sidebar (## Configuração Curricular (RAG)).
+Passo 1: Inicialização e Indexação (Automático)
+Ao rodar a aplicação, o Streamlit verifica o diretório curriculos_base e:
 
-Clique em Browse files e faça o Upload do(s) Currículo(s) em PDF.
+Verifica: Se os índices FAISS (Base de Conhecimento) para os PDFs já existem.
 
-Clique no botão Indexar Currículo.
+Indexa: Caso não existam, a aplicação automaticamente processa os PDFs, divide o texto e cria a Base de Conhecimento (Vector Store FAISS) para cada ano.
 
-A aplicação irá processar os PDFs, dividir o texto e criar uma Base de Conhecimento (Vector Store FAISS). Aguarde a mensagem de sucesso Currículo indexado com sucesso!.
+Verificação: Confirme na Sidebar a mensagem Currículos indexados e prontos para consulta... para prosseguir.
 
-Passo 2: Geração do Questionário (Área Principal)
-No campo de texto principal, insira a Localização da Defasagem de forma clara e específica.
+Passo 2: Upload do Boletim e Análise
+Na seção principal, faça o Upload do Boletim do Estudante (PDF).
 
-Exemplo: Matemática, II Unidade, 5º ano
+Clique no botão Analisar Boletim e Gerar Questionário.
 
-Exemplo: Língua Portuguesa, Gênero Textual Artigo de Opinião, 9º ano
+A aplicação executará duas cadeias de LLM em sequência:
 
-Clique no botão Gerar Questionário.
+Análise Estruturada: O LLM lerá o PDF e retornará uma saída JSON estruturada identificando o Ano Letivo (ex: 7º ano) e a Defasagem Específica em Matemática (ex: Frações).
 
-O sistema executará a cadeia RAG, recuperará o conteúdo programático relevante e usará o LLM para gerar e exibir o Pré-Questionário de Diagnóstico diretamente na tela, formatado em Markdown.
+RAG e Geração: O sistema buscará o currículo exato para o ano e tópico identificados e usará o LLM para gerar o Pré-Questionário de Diagnóstico.
+
+Passo 3: Auditoria do Contexto
+O Pré-Questionário gerado será exibido na tela. Utilize o Expander de Auditoria (Contexto Curricular Utilizado para Geração) para verificar o conteúdo curricular exato que foi recuperado pelo RAG para gerar as perguntas.
 
 ## 🤝 Contribuição
 Contribuições são bem-vindas! Se você tiver sugestões ou quiser melhorar o projeto, por favor, siga o fluxo padrão de contribuição:
