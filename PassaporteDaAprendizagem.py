@@ -32,7 +32,9 @@ os.makedirs(FAISS_INDEX_DIR, exist_ok=True)
 class Defasagem(BaseModel):
     """Esquema de saída estruturada para a análise do Boletim."""
     ano: str = Field(description="O ano letivo do estudante (ex: '7º ano'). Deve ser entre 6º e 9º ano.")
-    defasagem_foco: str = Field(description="O tópico curricular de Matemática com a pior performance do aluno (ex: 'Geometria Espacial', 'Equações de 1º grau').")
+    # NOVO CAMPO ADICIONADO:
+    bimestre: str = Field(description="O bimestre letivo da defasagem (ex: '3º bimestre'). Deve ser entre 1º e 4º.") 
+    defasagem_foco: str = Field(description="O termo de busca ideal para a grade curricular (ex: 'Grade curricular completa de Matemática do 3º Bimestre').")
     motivo: str = Field(description="Breve justificativa baseada no boletim (ex: 'Média de 4.0 na unidade 3 em Álgebra').")
 
 
@@ -41,14 +43,17 @@ class Defasagem(BaseModel):
 # ==============================================================================
 
 def load_prompt_rag():
-    """Carrega o template de prompt RAG."""
+    """Carrega o template de prompt RAG, com regra de separação para as abas."""
     prompt = """Você é um Analista Pedagógico e Avaliador Curricular de Matemática. 
-Sua missão é criar um Pré-Questionário de 5 perguntas de diagnóstico para um aluno do **{ano}**, focado em identificar a defasagem exata no tópico: '{defasagem_foco}'.
+Sua missão é criar um Pré-Questionário de 15 perguntas de diagnóstico para um aluno do **{ano}**, focado em identificar a defasagem exata no tópico: '{defasagem_foco}'.
 
 # REGRAS DE GERAÇÃO:
-1. **Foco Diagnóstico:** As 5 perguntas devem ser projetadas para testar conceitos básicos e intermediários relacionados ao tópico e **identificar a raiz da dificuldade** do aluno. Não faça perguntas triviais ou excessivamente complexas.
-2. **Contexto Exclusivo:** Use **APENAS** o 'Contexto Curricular Detalhado' recuperado para garantir a fidelidade ao programa de estudos do {ano}.
-3. **Formato de Saída:** Formate o resultado em Markdown, incluindo 5 perguntas (discursivas curtas ou múltipla escolha) e, logo abaixo, as respostas detalhadas.
+1. **Foco Diagnóstico Amplo:** As 15 perguntas devem ser projetadas para testar os conceitos mais fundamentais e diversos presentes no 'Contexto Curricular Detalhado'.
+2. **Contexto Exclusivo:** Use APENAS o 'Contexto Curricular Detalhado'.
+3. **Formato de Saída OBRIGATÓRIO:**
+    a. Comece com a **seção de Perguntas**.
+    b. Após a última pergunta e antes de iniciar as Respostas, insira **EXATAMENTE** o delimitador: `---FIM_PERGUNTAS---`.
+    c. Após o delimitador, inicie a seção de Respostas Detalhadas e Análise.
 
 Contexto Curricular Detalhado (currículo do {ano}): {context}
 """
@@ -65,16 +70,43 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 # ==============================================================================
-# 2. FUNÇÕES DE PROCESSAMENTO DE DADOS (Indexação e Análise)
+# 2. FUNÇÕES DE PROCESSAMENTO DE DATAS (Indexação e Análise)
 # ==============================================================================
 
 def extract_year_from_filename(filename):
-    """Extrai o ano letivo (6, 7, 8 ou 9) do nome do arquivo."""
-    match = re.search(r'[6-9][º]?\s*ano|ano\s*[6-9]', filename, re.IGNORECASE)
-    if match:
-        year = re.search(r'[6-9]', match.group(0)).group(0)
-        return f"{year}º ano"
+    """Extrai o ano letivo (6, 7, 8 ou 9) e o bimestre (1-4) do nome do arquivo de forma mais robusta."""
+    
+    # Padroniza o nome do arquivo: minúsculas, remove 'º', '°' e ' '
+    # Ex: 'EF-Matematica-6ano-1°bimestre.pdf' -> 'ef-matematica-6ano-1bimestre.pdf'
+    cleaned_filename = filename.lower().replace('º', '').replace('°', '') 
+
+    # 1. Extrai o Ano (Year) - procura por (digito 6-9) seguido de 'ano'
+    # O \s* permite encontrar '6ano' ou '6 ano'
+    match_year = re.search(r'([6-9])\s*ano', cleaned_filename)
+    year_key = None
+    if match_year:
+        year = match_year.group(1)
+        year_key = f"{year}º ano"
+        
+    # 2. Extrai o Bimestre (Bimestre) - procura por (digito 1-4) seguido de 'bimestre'
+    match_bimestre = re.search(r'([1-4])\s*bimestre', cleaned_filename)
+    bimestre_key = None
+    if match_bimestre:
+        bimestre = match_bimestre.group(1)
+        bimestre_key = f"B{bimestre}" # Ex: B1
+        
+    # Combina e retorna a chave se ambos forem encontrados
+    if year_key and bimestre_key:
+        return f"{year_key} {bimestre_key}"
+        
+    # Se a extração falhou (apenas ano, apenas bimestre, ou nenhum)
     return None
+
+def get_sanitized_index_key(year_key: str) -> str:
+    """Converte a chave legível (ex: '6º ano B3') para o nome de pasta FAISS seguro (ex: '6ano_B3')."""
+    # Remove 'º ano', remove espaços e converte para minúsculas para segurança.
+    sanitized = year_key.lower().replace('º ano', 'ano').replace(' ', '_')
+    return f"faiss_matematica_{sanitized}"
 
 def initialize_knowledge_base():
     """Verifica a pasta de currículos, indexa PDFs e retorna o status."""
@@ -97,8 +129,8 @@ def initialize_knowledge_base():
             sl.warning(f"Ignorando '{pdf_name}'. Não foi possível identificar o ano (6º-9º).", icon="⚠️")
             continue
 
-        year_sanitized = year_key.replace('º ano', 'ano')
-        index_path = os.path.join(FAISS_INDEX_DIR, f"faiss_matematica_{year_sanitized}")
+        index_name = get_sanitized_index_key(year_key) # Ex: 'faiss_matematica_6ano_b3'
+        index_path = os.path.join(FAISS_INDEX_DIR, index_name)
         
         # 1. Verifica se o índice FAISS já existe
         if os.path.exists(index_path):
@@ -127,10 +159,11 @@ def load_vector_store_by_year(year: str):
     """Carrega o Vector Store FAISS correto do disco."""
     embeddings = GoogleGenerativeAIEmbeddings(model="text-embedding-004")
     
-    year_sanitized = year.replace('º ano', 'ano')
-    index_path = os.path.join(FAISS_INDEX_DIR, f"faiss_matematica_{year_sanitized}")
+    index_name = get_sanitized_index_key(year) # Ex: 'faiss_matematica_6ano_b3'
+    index_path = os.path.join(FAISS_INDEX_DIR, index_name)
     
     if not os.path.exists(index_path):
+        # Falha no carregamento (índice não existe)
         return None
         
     try:
@@ -138,29 +171,34 @@ def load_vector_store_by_year(year: str):
         vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
         return vectorstore
     except Exception:
+        # Falha no carregamento (índice corrompido)
         return None
+        
 def analyze_boletim(boletim_text, llm):
     """Analisa o texto do boletim usando LLM e retorna a defasagem estruturada."""
     
     # 1. Definir o LLM com o formato de saída estruturada
-    # O PydanticOutputParser não é mais necessário, pois o LLM fará o parse.
     llm_structured = llm.with_structured_output(Defasagem)
     
-    # 2. Definir o prompt simplificado (sem injeção de format_instructions)
+    # 2. Definir o prompt simplificado
     analysis_prompt = ChatPromptTemplate.from_messages([
         ("system", 
-         """Você é um Analista Pedagógico especialista em Matemática, anos 6º ao 9º. 
-         Sua tarefa é analisar o desempenho do aluno no boletim fornecido e identificar, na disciplina de Matemática, qual foi a unidade ou tópico curricular com o pior desempenho ou maior defasagem.
-         Você deve retornar a saída estritamente no formato JSON, conforme o esquema Pydantic fornecido no template de saída.
-         
-         Instruções Específicas:
-         1. Disciplina Foco: APENAS Matemática.
-         2. Ano: Deve ser um valor entre 6º e 9º ano.
-         """),
-        ("user", "Analise o texto do boletim abaixo e extraia o ano e a defasagem de Matemática:\n\n{boletim_text}")
-    ])
+        """Você é um Analista Pedagógico especialista em Matemática, anos 6º ao 9º. 
+        Sua tarefa é analisar o desempenho do aluno no boletim fornecido e identificar:
+        1. O **Ano** (6º ao 9º) e o **Bimestre** (1º ao 4º) em que o aluno obteve o pior desempenho em Matemática.
+        2. O **termo de busca** ideal para a grade curricular desse período (`defasagem_foco`).
+
+        # REGRAS DE INFERÊNCIA E SAÍDA:
+        * Se o boletim **NÃO** detalhar unidades/tópicos (apenas médias bimestrais), use a frase de busca genérica: 'Grade curricular completa de Matemática do BIMESTRE X'.
+        * Se o boletim **DETALHAR** o tópico (e a defasagem for clara), use o tópico específico (ex: 'Geometria Espacial').
+        * Você DEVE retornar uma saída estruturada válida. Nunca retorne 'Não informado' nos campos `ano`, `bimestre` ou `defasagem_foco`.
+
+        Instruções Finais: Retorne a saída estritamente no formato JSON, conforme o esquema Pydantic.
+
+        """),
+        ("user", "Analise o texto do boletim abaixo e extraia o ano e a defasagem de Matemática:\n\n{boletim_text}")])
     
-    # 3. Criar a cadeia (agora sem o parser, pois está no LLM)
+    # 3. Criar a cadeia
     chain = (analysis_prompt | llm_structured)
     
     try:
@@ -168,7 +206,6 @@ def analyze_boletim(boletim_text, llm):
         result = chain.invoke({"boletim_text": boletim_text}) 
         return result
     except Exception as e:
-        # Esta exceção agora só deve ser acionada se o modelo não retornar JSON válido.
         sl.error(f"Erro ao analisar o boletim (LLM): {e}", icon="❌")
         return None
 
@@ -186,7 +223,7 @@ def extract_data_from_pdf(pdf_file):
     except Exception as e:
         sl.error(f"Erro ao carregar o PDF do Boletim: {e}", icon="❌")
         return None
-        
+
 # ==============================================================================
 # 3. FUNÇÕES AUXILIARES DE STREAMLIT
 # ==============================================================================
@@ -271,17 +308,35 @@ if __name__ == '__main__':
                     sl.caption(f"Motivo (Análise do Boletim): {def_data.motivo}")
                     
                     # C. Mapeamento e Carregamento Dinâmico do Vector Store (Etapa 2)
-                    with sl.spinner(f"Carregando base curricular específica do **{def_data.ano}**..."):
-                        knowledge_base_specific = load_vector_store_by_year(def_data.ano)
+                    try:
+                        # 1. Extrai o número do bimestre e constrói a chave de busca.
+                        bimestre_match = re.search(r'[1-4]', def_data.bimestre)
+                        if not bimestre_match:
+                            raise ValueError("Não foi possível extrair o número do bimestre (1-4).")
+                            
+                        bimestre_num = bimestre_match.group(0) 
+                        
+                        # Chave composta usada para FAISS: Ex: '6º ano B3'
+                        key_busca = f"{def_data.ano} B{bimestre_num}" 
+                        
+                    except Exception as e:
+                        sl.error(f"Erro ao processar o Ano/Bimestre: {e}", icon="❌")
+                        sl.stop() # Interrompe a execução se a chave não for válida.
+
+                    # 2. Carrega o Vector Store específico.
+                    with sl.spinner(f"Carregando base curricular específica: **{key_busca}**..."):
+                        knowledge_base_specific = load_vector_store_by_year(key_busca)
                         
                     if knowledge_base_specific is None:
-                        sl.error(f"Falha no carregamento da base curricular de {def_data.ano}. O índice FAISS não existe ou está corrompido.", icon="❌")
+                        sl.error(f"Falha no carregamento da base curricular de **{key_busca}**. O índice FAISS não existe ou está corrompido.", icon="❌")
+                        sl.warning(f"Certifique-se de que o arquivo de currículo do **{def_data.ano}** e **{def_data.bimestre}** foi indexado corretamente na pasta `curriculos_base`.", icon="⚠️")
                         sl.stop() # Interrompe a execução
                         
                     # D. Preparar e Executar o RAG (LLM Chain 2) - ETAPA 3
                     try:
                         prompt_rag = load_prompt_rag()
-                        retriever = knowledge_base_specific.as_retriever(search_kwargs={"k": 5})
+                        # k=10 ou mais pode ser mais adequado para o modo 'Grade Curricular Completa'
+                        retriever = knowledge_base_specific.as_retriever(search_kwargs={"k": 10}) 
                         
                         with sl.spinner(f"Buscando conteúdo curricular e gerando questionário de diagnóstico para {def_data.defasagem_foco}..."):
                             
@@ -300,10 +355,31 @@ if __name__ == '__main__':
                             generation_chain = (prompt_rag | llm | StrOutputParser())
                             response = generation_chain.invoke(prompt_input) 
                         
-                        # Output
-                        sl.subheader("2. Pré-Questionário de Diagnóstico Gerado:")
-                        sl.markdown(response)
-                        
+                        # --- MODIFICAÇÃO DE INTERFACE AQUI ---
+                        sl.subheader("2. Pré-Questionário de Diagnóstico Gerado 📝")
+
+                        # 1. Tenta dividir o conteúdo no delimitador
+                        DELIMITER = "---FIM_PERGUNTAS---"
+                        if DELIMITER in response:
+                            perguntas_str, gabarito_str = response.split(DELIMITER, 1)
+                        else:
+                            # Se o LLM falhar e não incluir o delimitador, exibe o conteúdo completo nas duas abas
+                            perguntas_str = response
+                            gabarito_str = "Falha ao separar perguntas e gabarito. Conteúdo completo na aba Perguntas."
+                            sl.warning("O modelo LLM falhou ao inserir o delimitador. O questionário completo está na primeira aba.", icon="⚠️")
+
+                        # 2. Uso de abas para separar perguntas e respostas
+                        tab1, tab2 = sl.tabs(["📋 Perguntas e Instruções", "🔍 Gabarito e Análise Pedagógica"])
+
+                        with tab1:
+                            sl.markdown("### Questionário de Triagem Rápida")
+                            sl.markdown(perguntas_str) # Apenas as perguntas
+                            
+                        with tab2:
+                            sl.markdown("### Gabarito e Análise")
+                            sl.markdown(gabarito_str) # Apenas o gabarito
+
+
                         # E. Auditoria e Transparência do RAG (Etapa 4 - NOVO)
                         with sl.expander("📚 Contexto Curricular Utilizado para Geração (Auditoria)"):
                             sl.markdown(context_str)
