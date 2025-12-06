@@ -1,11 +1,5 @@
 # Ignorar arquivos de ambiente (muito importante)
 .env
-
-# Ignorar pastas de cache e indexação
-__pycache__/
-uploaded/
-faiss_indices/
-
 # Ignorar arquivos do Streamlit/Python
 *.pyc
 .streamlit/
