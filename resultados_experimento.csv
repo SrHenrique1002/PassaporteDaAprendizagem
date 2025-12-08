@@ -1,0 +1,8 @@
+arquivo,status,tempo_leitura,tempo_analise,tempo_geracao,tempo_total,defasagem_ano,defasagem_topico
+Estudante 1.pdf,Sucesso,2.1850829124450684,4.3589372634887695,45.467286109924316,52.01148581504822,6º ano,Grade curricular completa de Matemática do 3º Bimestre
+Estudante 2.pdf,Sucesso,0.10918807983398438,2.268386125564575,36.70793914794922,39.085532903671265,6º ano,Grade curricular completa de Matemática do 3º Bimestre
+Estudante 3.pdf,Sucesso,0.07241225242614746,2.233203172683716,32.411325454711914,34.71695590019226,6º ano,Grade curricular completa de Matemática do 4º Bimestre
+Estudante 4.pdf,Erro Técnico,0.08451628684997559,2.443023443222046,0.0,67.55087947845459,9º ano,Grade curricular completa de Matemática do 3º Bimestre
+Estudante 5.pdf,Erro: LLM não retornou dados,0.21002674102783203,69.33442449569702,0.0,69.54445505142212,-,-
+Estudante 6.pdf,Erro: LLM não retornou dados,0.051258087158203125,63.66170954704285,0.0,63.712971210479736,-,-
+Estudante 7.pdf,Erro Técnico,0.09140539169311523,4.958327293395996,0.0,69.73301768302917,9º ano,Grade curricular completa de Matemática do 2º Bimestre

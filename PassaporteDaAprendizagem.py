@@ -286,7 +286,7 @@ if __name__ == '__main__':
                 if boletim_text:
                     sl.info("Boletim lido. Iniciando a análise para identificar a defasagem...", icon="🔍")
                     
-                    with sl.spinner("Identificando o foco da defasagem em Matemática (Ex: 7º ano, Álgebra)..."):
+                    with sl.spinner("Identificando o foco da defasagem em Matemática..."):
                         defasagem_result = analyze_boletim(boletim_text, llm)
                         sl.session_state.defasagem_data = defasagem_result
                         

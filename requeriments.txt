@@ -4,6 +4,7 @@ langchain-core
 langchain-community
 langchain
 langchain-google-genai
+pydantic
 
 # Dependências para leitura de PDF e Vector Store
 pypdf
